@@ -1,43 +1,4 @@
-#pragma comment(lib, "libmySQL.lib")
-#pragma once
-#include <mysql.h>
-#include "sql.h"
-#include "sqlext.h"
-#include <iostream>
-
-#define DB_HOST "127.0.0.1"
-#define DB_USER "root"
-#define DB_PW "tjdwo@1034"
-#define DB_NAME "skyfall"
-
-class DB
-{
-public:
-	MYSQL* connection = NULL;
-	MYSQL conn;
-	MYSQL_RES* sql_result;
-	MYSQL_ROW sql_row;
-	char query[255];
-	bool isRun = false;
-
-	bool Connection();
-	bool Send_Query(char* query);
-
-	SQLHENV hEnv;
-	SQLHDBC hDbc;
-	SQLHSTMT hStmt = 0;
-
-	SQLCHAR* name = (SQLCHAR*)"skyfall";
-	SQLCHAR* user = (SQLCHAR*)"root";
-	SQLCHAR* pw = (SQLCHAR*)"tjdwo@1034";
-
-	bool Connection_ODBC();
-	void Disconnection_ODBC();
-
-	bool Search_ID(char* id, char* pw);
-	bool Insert_ID(char* id, char* pw);
-	bool Logout_player(char* id);
-};
+#include "DB.h"
 
 bool DB::Connection()
 {
@@ -77,7 +38,6 @@ bool DB::Send_Query(char* query)
         return 1;
 }
 
-
 bool DB::Connection_ODBC()
 {
     // 환경 구성
@@ -96,12 +56,16 @@ bool DB::Connection_ODBC()
     if (SQLConnect(hDbc, (SQLWCHAR*)L"skyfall", SQL_NTS
         , (SQLWCHAR*)L"root", SQL_NTS
         , (SQLWCHAR*)L"tjdwo@1034", SQL_NTS)
-        != SQL_SUCCESS)
+        != SQL_SUCCESS) {
+        std::cout << "DB error!\n";
         return false;
+    }
     if (SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt)
-        != SQL_SUCCESS)
+        != SQL_SUCCESS){
+        std::cout << "DB error!\n";
         return false;
-
+    }
+    std::cout << "DB connected!\n";
     return true;
 }
 
@@ -117,16 +81,13 @@ void DB::Disconnection_ODBC()
         SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
 }
 
-bool DB::Search_ID(char* id, char* pw)
+bool DB::Search_ID(char* id)
 {
-    wchar_t query1[512] = L"SELECT isLogin FROM skyfall.userinfo WHERE ID = '";
-    wchar_t query2[512] = L"SELECT PassWord FROM skyfall.userinfo WHERE ID = '";
+    wchar_t query1[512] = L"SELECT isLogin FROM GS_termproject.userinfo WHERE ID = '";
     wchar_t wcID[20];
-    wchar_t wcPW[20];
 
-    char PW[20];
     SQLLEN len = 0;
-    bool isLogin;
+    bool isLogin = 0;
 
     MultiByteToWideChar(CP_ACP, 0, id, -1, wcID, sizeof(id));
 
@@ -144,7 +105,7 @@ bool DB::Search_ID(char* id, char* pw)
 
     if (SQLExecDirect(hStmt, (SQLWCHAR*)query1, SQL_NTS)
         != SQL_SUCCESS) {
-        printf("Query invaild\n");
+        printf("Search_ID Query invaild\n");
         return false;
     }
     SQLBindCol(hStmt, 1, SQL_C_TINYINT, &isLogin, sizeof(bool), &len);
@@ -152,41 +113,18 @@ bool DB::Search_ID(char* id, char* pw)
     if (hStmt) SQLCloseCursor(hStmt);
 
     if (isLogin == true) return false;
-
-    // PW 일치 검사
-    wcscat_s(query2, wcID);
-    wcscat_s(query2, L"'");
-    if (SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt)
-        != SQL_SUCCESS)
-        return false;
-
-    if (SQLExecDirect(hStmt, (SQLWCHAR*)query2, SQL_NTS)
-        != SQL_SUCCESS) {
-        printf("Query invaild\n");
-        return false;
-    }
-    SQLBindCol(hStmt, 1, SQL_C_CHAR, PW, sizeof(PW), &len);
-    if (SQLFetch(hStmt) == SQL_NO_DATA) return false;
-    if (hStmt) SQLCloseCursor(hStmt);
-
-    if (strcmp(PW, pw) == 0) return true;
-
     return false;
 }
 
-bool DB::Insert_ID(char* id, char* pw)
+bool DB::Insert_ID(char* id)
 {
-    wchar_t query[512] = L"insert into skyfall.userinfo VALUES ('";
+    wchar_t query[512] = L"insert into GS_termproject.userinfo VALUES ('";
     wchar_t wcID[20];
-    wchar_t wcPW[20];
 
     MultiByteToWideChar(CP_ACP, 0, id, -1, wcID, sizeof(id));
-    MultiByteToWideChar(CP_ACP, 0, pw, -1, wcPW, sizeof(pw));
 
     wcscat_s(query, wcID);
-    wcscat_s(query, L"', 0, '");
-    wcscat_s(query, wcPW);
-    wcscat_s(query, L"')");
+    wcscat_s(query, L"', '0')");
 
 #ifdef Test_DB 
     wprintf(L"%s\n", query);
@@ -198,7 +136,7 @@ bool DB::Insert_ID(char* id, char* pw)
 
     if (SQLExecDirect(hStmt, (SQLWCHAR*)query, SQL_NTS)
         != SQL_SUCCESS) {
-        printf("Query invaild\n");
+        printf("Insert_ID Query invaild\n");
         return false;
     }
 
@@ -209,7 +147,7 @@ bool DB::Insert_ID(char* id, char* pw)
 
 bool DB::Logout_player(char* id)
 {
-    wchar_t query[512] = L"UPDATE skyfall.UserInfo SET isLogin = 0 WHERE ID = '";
+    wchar_t query[512] = L"UPDATE GS_termproject.UserInfo SET isLogin = 0 WHERE ID = '";
     wchar_t wcID[20];
 
     MultiByteToWideChar(CP_ACP, 0, id, -1, wcID, sizeof(id));

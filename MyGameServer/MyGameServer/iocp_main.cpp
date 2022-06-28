@@ -12,6 +12,7 @@ HANDLE h_iocp;
 CTimer* g_pTimer = new CTimer;
 MY_AI* g_pAI = new MY_AI;
 MAP* g_pMap = new MAP;
+DB* g_pDB = new DB;
 
 //#define test
 
@@ -122,6 +123,16 @@ void send_login_ok_packet(int p_id)
 	p.y = objects[p_id].y;
 	send_packet(p_id, &p);
 }
+
+void send_login_fail_packet(int p_id)
+{
+	sc_packet_login_fail p;
+	p.size = sizeof(p);
+	p.type = SC_LOGIN_FAIL;
+	printf("tlqkf\n");
+	send_packet(p_id, &p);
+}
+
 
 void send_move_packet(int c_id, int p_id)
 {
@@ -256,7 +267,8 @@ void do_move(int p_id, MOVE_DIR dir)
 	send_move_packet(p_id, p_id);
 
 	for (auto pl : new_vl) {
-		if (0 == old_vl.count(pl)) {		// 1. 새로 시야에 들어오는 경우
+		if (0 == old_vl.count(pl)) {		
+			// 1. 새로 시야에 들어오는 경우
 			objects[p_id].m_vl.lock();
 			objects[p_id].m_view_list.insert(pl);
 			objects[p_id].m_vl.unlock();
@@ -282,7 +294,8 @@ void do_move(int p_id, MOVE_DIR dir)
 				PostQueuedCompletionStatus(h_iocp, 1, pl, &ex_over->m_over);
 			}
 		}
-		else {								// 2. 기존 시야에도 있고 새 시야에도 있는 경우
+		else {								
+			// 2. 기존 시야에도 있고 새 시야에도 있는 경우
 			if (false == is_npc(pl)) {
 				objects[pl].m_vl.lock();
 				if (0 == objects[pl].m_view_list.count(p_id)) {
@@ -405,6 +418,23 @@ void process_packet(int p_id, unsigned char* p_buf)
 	switch (p_buf[1]) {
 	case CS_LOGIN: {
 		cs_packet_login* packet = reinterpret_cast<cs_packet_login*>(p_buf);
+		char name[20];
+		strcpy_s(name, packet->player_id);
+
+		bool state = g_pDB->Search_ID(name);
+		if (state) {
+			send_login_fail_packet(p_id);
+			std::cout << "fall\n";
+			break;
+		}
+		
+		state = g_pDB->Insert_ID(name);
+		if (!state) {
+			send_login_fail_packet(p_id);
+			std::cout << "make ID fall / ID: " << packet->player_id << "\n";
+			break;
+		}
+
 		lock_guard <mutex> gl2{ objects[p_id].m_slock };
 		strcpy_s(objects[p_id].m_name, packet->player_id);
 
@@ -918,6 +948,7 @@ int main()
 
 	//g_pMap->make_map();
 	g_pMap->load_map();
+	g_pDB->Connection_ODBC();
 
 	init_objects();
 

@@ -3,6 +3,7 @@
 #include "MY_AI.h"
 #include "CTimer.h"
 #include "CMap.h"
+#include "DB.h"
 
 void wake_up_npc(int npc_id);
 bool is_npc(int id);

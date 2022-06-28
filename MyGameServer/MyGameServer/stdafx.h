@@ -14,6 +14,7 @@ using namespace std;
 #include "protocol.h"
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "MSWSock.lib")
+#pragma comment(lib, "libmySQL.lib")
 
 extern "C" { //C로 정의된 라이브러리인것을 명시(컴파일러에게 알려줌)
 #include "lua.h"

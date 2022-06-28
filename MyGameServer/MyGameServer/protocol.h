@@ -103,6 +103,7 @@ struct sc_packet_add_object {
 struct cs_packet_login {
 	unsigned char	size;
 	char	type;
+	int		id;
 	char       player_id[MAX_ID_LEN ];
 };
 

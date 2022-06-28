@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <chrono>
+#include <Windows.h>
 using namespace std;
 
 #ifdef _DEBUG
@@ -24,7 +25,7 @@ using namespace std;
 
 #include "..\..\MyGameServer\MyGameServer\protocol.h"
 
-sf::TcpSocket socket;
+sf::TcpSocket g_socket;
 sf::RenderWindow* g_window;
 sf::Font g_font;
 sf::Font g_font2;
@@ -46,6 +47,7 @@ char battle_mass_buf[100];
 int g_left_x;
 int g_top_y;
 int g_myid;
+bool g_loginOK = false;
 
 enum OBJECT_TYPE {
 	player,

@@ -33,6 +33,9 @@ sf::Texture* home;
 
 sf::Texture* attack01;
 
+HWND login_h;
+string name;
+
 void client_initialize()
 {
 	block1 = new sf::Texture;
@@ -140,7 +143,16 @@ void ProcessPacket(char* ptr)
 		g_left_x = packet->x - SCREEN_WIDTH / 2;
 		g_top_y = packet->y - SCREEN_HEIGHT / 2;
 		avatar.move(packet->x, packet->y);
+
+		g_loginOK = true;
 		avatar.show();
+	}
+	break;
+	case SC_LOGIN_FAIL:
+	{
+		std::cout << "ID Duplicate\n";
+		cout << "ID insert: ";
+		cin >> name;
 	}
 	break;
 	case SC_ADD_OBJECT:
@@ -357,7 +369,7 @@ void client_main()
 	char net_buf[BUF_SIZE];
 	size_t	received;
 
-	auto recv_result = socket.receive(net_buf, BUF_SIZE, received);
+	auto recv_result = g_socket.receive(net_buf, BUF_SIZE, received);
 	if (recv_result == sf::Socket::Error)
 	{
 		wcout << L"Recv 에러!";
@@ -413,7 +425,7 @@ void send_move_packet(MOVE_DIR dr)
 	packet.type = CS_MOVE;
 	packet.direction = dr;
 	size_t sent = 0;
-	socket.send(&packet, sizeof(packet), sent);
+	g_socket.send(&packet, sizeof(packet), sent);
 }
 
 void send_login_packet(string& name)
@@ -423,7 +435,7 @@ void send_login_packet(string& name)
 	packet.type = CS_LOGIN;
 	strcpy_s(packet.player_id, name.c_str());
 	size_t sent = 0;
-	socket.send(&packet, sizeof(packet), sent);
+	g_socket.send(&packet, sizeof(packet), sent);
 }
 
 void send_attack_packet()
@@ -433,7 +445,7 @@ void send_attack_packet()
 	packet.type = CS_ATTACK;
 	packet.id = g_myid;
 	size_t sent = 0;
-	socket.send(&packet, sizeof(packet), sent);
+	g_socket.send(&packet, sizeof(packet), sent);
 }
 
 int main()
@@ -441,31 +453,49 @@ int main()
 	wcout.imbue(locale("korean"));
 
 	string IP{};
-	string name{};
 
 	sf::Socket::Status status = sf::Socket::Error;
 
 	while (status == sf::Socket::Error) {
 		cout << "IP insert: ";
 		cin >> IP;
-		cout << "ID insert: ";
-		cin >> name;
-		//sf::Socket::Status status = socket.connect("127.0.0.1", SERVER_PORT);
-		status = socket.connect(IP, SERVER_PORT);
+		//sf::Socket::Status status = g_socket.connect("127.0.0.1", SERVER_PORT);
+		status = g_socket.connect(IP, SERVER_PORT);
 		if (status != sf::Socket::Done) {
 			wcout << L"Server connect FAIL\n";
 		}
 	}
-
-	socket.setBlocking(false);
+	wcout << L"Server connect\n";
+	g_socket.setBlocking(false);
 
 	client_initialize();
-	int tt = chrono::duration_cast<chrono::milliseconds>
-		(chrono::system_clock::now().
-			time_since_epoch()).count();
-	name += to_string(tt % 1000);
-	send_login_packet(name);
+
+	char net_buf[BUF_SIZE];
+	size_t	received;
+
+	cout << "ID insert: ";
+	cin >> name;
+	while (g_loginOK == false) {
+		if (!name.empty()) {
+			send_login_packet(name);
+			int tt = chrono::duration_cast<chrono::milliseconds>
+				(chrono::system_clock::now().
+					time_since_epoch()).count();
+			name += to_string(tt % 1000);
+			name.clear();
+		}
+		auto recv_result = g_socket.receive(net_buf, BUF_SIZE, received);
+		if (recv_result == sf::Socket::Error)
+		{
+			wcout << L"Recv 에러!";
+			while (true);
+		}
+		if (recv_result != sf::Socket::NotReady)
+			if (received > 0) process_data(net_buf, received);
+	}
 	//avatar.set_name(name.c_str());
+	std::cout << "LOGIN OK\n";
+
 	sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "2016180045");
 	g_window = &window;
 
@@ -478,67 +508,69 @@ int main()
 
 	sf::Clock clock;
 
+
 	while (window.isOpen())
 	{
-		float time = clock.getElapsedTime().asSeconds();
-		clock.restart();
-		move_timer += time;
-		attack_timer += time;
-		message_time += time;
+		/*if (g_loginOK == true) {*/
+			float time = clock.getElapsedTime().asSeconds();
+			clock.restart();
+			move_timer += time;
+			attack_timer += time;
+			message_time += time;
 
-		sf::Event event;
-		while (window.pollEvent(event))
-		{
-			if (event.type == sf::Event::Closed)
-				window.close();
-			if (event.type == sf::Event::KeyPressed) {
-				MOVE_DIR p_type = MOVE_DIR::NO;
-				switch (event.key.code) {
-				case sf::Keyboard::Left:
-					p_type = MOVE_DIR::LEFT;
-					if (move_timer > move_delay) {
-						move_timer = 0;
-						send_move_packet(p_type);
-					}
-					break;
-				case sf::Keyboard::Right:
-					p_type = MOVE_DIR::RIGHT;
-					if (move_timer > move_delay) {
-						move_timer = 0;
-						send_move_packet(p_type);
-					}
-					break;
-				case sf::Keyboard::Up:
-					p_type = MOVE_DIR::UP;
-					if (move_timer > move_delay) {
-						move_timer = 0;
-						send_move_packet(p_type);
-					}
-					break;
-				case sf::Keyboard::Down:
-					p_type = MOVE_DIR::DOWN;
-					if (move_timer > move_delay) {
-						move_timer = 0;
-						send_move_packet(p_type);
-					}
-					break;
-				case sf::Keyboard::Escape:
+			sf::Event event;
+			while (window.pollEvent(event))
+			{
+				if (event.type == sf::Event::Closed)
 					window.close();
-					break;
-				case sf::Keyboard::A:
-					if (attack_timer > attack_delay) {
-						attack_timer = 0;
-						send_attack_packet();
-						attack_effect.show(avatar.m_x, avatar.m_y);
+				if (event.type == sf::Event::KeyPressed) {
+					MOVE_DIR p_type = MOVE_DIR::NO;
+					switch (event.key.code) {
+					case sf::Keyboard::Left:
+						p_type = MOVE_DIR::LEFT;
+						if (move_timer > move_delay) {
+							move_timer = 0;
+							send_move_packet(p_type);
+						}
+						break;
+					case sf::Keyboard::Right:
+						p_type = MOVE_DIR::RIGHT;
+						if (move_timer > move_delay) {
+							move_timer = 0;
+							send_move_packet(p_type);
+						}
+						break;
+					case sf::Keyboard::Up:
+						p_type = MOVE_DIR::UP;
+						if (move_timer > move_delay) {
+							move_timer = 0;
+							send_move_packet(p_type);
+						}
+						break;
+					case sf::Keyboard::Down:
+						p_type = MOVE_DIR::DOWN;
+						if (move_timer > move_delay) {
+							move_timer = 0;
+							send_move_packet(p_type);
+						}
+						break;
+					case sf::Keyboard::Escape:
+						window.close();
+						break;
+					case sf::Keyboard::A:
+						if (attack_timer > attack_delay) {
+							attack_timer = 0;
+							send_attack_packet();
+							attack_effect.show(avatar.m_x, avatar.m_y);
+						}
+						break;
 					}
-					break;
+					//if (MOVE_DIR::NO != p_type && MOVE_DIR::RANDOM != p_type /*&& move_delay > 10*/) send_move_packet(p_type);
 				}
-				//if (MOVE_DIR::NO != p_type && MOVE_DIR::RANDOM != p_type /*&& move_delay > 10*/) send_move_packet(p_type);
 			}
-		}
-		if (attack_timer > attack_delay / 2)
-			attack_effect.hide();
-
+			if (attack_timer > attack_delay / 2)
+				attack_effect.hide();
+		/*}*/
 		window.clear();
 		client_main();
 		window.display();
