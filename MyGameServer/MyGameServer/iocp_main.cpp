@@ -99,13 +99,15 @@ void do_recv(int key)
 int get_new_player_id(SOCKET p_socket)
 {
 	for (int i = SERVER_ID + 1; i <= MAX_USER; ++i) {
-		lock_guard<mutex> lg{ objects[i].m_slock };
+		objects[i].m_info_lock.lock();
 		if (PLST_FREE == objects[i].m_state) {
 			objects[i].m_state = PLST_CONNECTED;
 			objects[i].m_socket = p_socket;
 			objects[i].m_name[0] = 0;
+			objects[i].m_info_lock.unlock();
 			return i;
 		}
+		objects[i].m_info_lock.unlock();
 	}
 	return -1;
 }
@@ -191,17 +193,21 @@ void send_object_stat(int id)
 
 void disconnect(int p_id)
 {
-	{
-		lock_guard <mutex> gl{ objects[p_id].m_slock };
-		if (objects[p_id].m_state == PLST_FREE) return;
-		closesocket(objects[p_id].m_socket);
-		objects[p_id].m_state = PLST_FREE;
+	objects[p_id].m_info_lock.lock();
+	if (objects[p_id].m_state == PLST_FREE) {
+		objects[p_id].m_info_lock.unlock();
+		return;
 	}
+	closesocket(objects[p_id].m_socket);
+	objects[p_id].m_state = PLST_FREE;
+	objects[p_id].m_info_lock.unlock();
+
 	for (auto& pl : objects) {
 		if (false == is_npc(pl.id)) {
-			lock_guard<mutex> gl2{ pl.m_slock };
+			pl.m_info_lock.lock();
 			if (PLST_INGAME == pl.m_state)
 				send_remove_object(pl.id, p_id);
+			pl.m_info_lock.unlock();
 		}
 	}
 }
@@ -238,6 +244,7 @@ void do_move(int p_id, MOVE_DIR dir)
 	case RIGHT: if (can_move(x, y, dir) == true) x++; break;
 	}
 
+	// 주변섹터의 오브젝트 리스트
 	unordered_set<int> near_object_list;
 	for (int i = objects[p_id].sector_x - 1; i < objects[p_id].sector_x + 2; i++) {
 		for (int j = objects[p_id].sector_y - 1; j < objects[p_id].sector_y + 2; j++) {
@@ -252,9 +259,9 @@ void do_move(int p_id, MOVE_DIR dir)
 	}
 
 	unordered_set<int> old_vl;
-	objects[p_id].m_vl.lock();
+	objects[p_id].m_vlist_lock.lock();
 	old_vl = objects[p_id].m_view_list;
-	objects[p_id].m_vl.unlock();
+	objects[p_id].m_vlist_lock.unlock();
 
 	unordered_set<int> new_vl;
 	for (auto& pl : near_object_list) {
@@ -269,20 +276,20 @@ void do_move(int p_id, MOVE_DIR dir)
 	for (auto pl : new_vl) {
 		if (0 == old_vl.count(pl)) {		
 			// 1. 새로 시야에 들어오는 경우
-			objects[p_id].m_vl.lock();
+			objects[p_id].m_vlist_lock.lock();
 			objects[p_id].m_view_list.insert(pl);
-			objects[p_id].m_vl.unlock();
+			objects[p_id].m_vlist_lock.unlock();
 			send_add_object(p_id, pl);
 
 			if (false == is_npc(pl)) {
-				objects[pl].m_vl.lock();
+				objects[pl].m_vlist_lock.lock();
 				if (0 == objects[pl].m_view_list.count(p_id)) {
 					objects[pl].m_view_list.insert(p_id);
-					objects[pl].m_vl.unlock();
+					objects[pl].m_vlist_lock.unlock();
 					send_add_object(pl, p_id);
 				}
 				else {
-					objects[pl].m_vl.unlock();
+					objects[pl].m_vlist_lock.unlock();
 					send_move_packet(pl, p_id);
 				}
 			}
@@ -297,14 +304,14 @@ void do_move(int p_id, MOVE_DIR dir)
 		else {								
 			// 2. 기존 시야에도 있고 새 시야에도 있는 경우
 			if (false == is_npc(pl)) {
-				objects[pl].m_vl.lock();
+				objects[pl].m_vlist_lock.lock();
 				if (0 == objects[pl].m_view_list.count(p_id)) {
 					objects[pl].m_view_list.insert(p_id);
-					objects[pl].m_vl.unlock();
+					objects[pl].m_vlist_lock.unlock();
 					send_add_object(pl, p_id);
 				}
 				else {
-					objects[pl].m_vl.unlock();
+					objects[pl].m_vlist_lock.unlock();
 					send_move_packet(pl, p_id);
 				}
 				send_move_packet(pl, p_id);
@@ -321,36 +328,36 @@ void do_move(int p_id, MOVE_DIR dir)
 	for (auto pl : old_vl) {
 		if (0 == new_vl.count(pl)) {
 			// 3. 시야에서 사라진 경우
-			objects[p_id].m_vl.lock();
+			objects[p_id].m_vlist_lock.lock();
 			objects[p_id].m_view_list.erase(pl);
-			objects[p_id].m_vl.unlock();
+			objects[p_id].m_vlist_lock.unlock();
 			send_remove_object(p_id, pl);
 
 			if (false == is_npc(pl)) {
-				objects[pl].m_vl.lock();
+				objects[pl].m_vlist_lock.lock();
 				if (0 != objects[pl].m_view_list.count(p_id)) {
 					objects[pl].m_view_list.erase(p_id);
-					objects[pl].m_vl.unlock();
+					objects[pl].m_vlist_lock.unlock();
 					send_remove_object(pl, p_id);
 				}
 				else
-					objects[pl].m_vl.unlock();
+					objects[pl].m_vlist_lock.unlock();
 			}
 		}
 	}
 
-	if ((objects[p_id].sector_x != (objects[p_id].x / SECTOR_SIZE))
-		|| (objects[p_id].sector_y != (objects[p_id].y / SECTOR_SIZE))) {
-		sectors[objects[p_id].sector_x][objects[p_id].sector_y].m_list_lock.lock();
-		sectors[objects[p_id].sector_x][objects[p_id].sector_y]
-			.m_object_list.erase(p_id);
-		sectors[objects[p_id].sector_x][objects[p_id].sector_y].m_list_lock.unlock();
-		objects[p_id].sector_x = objects[p_id].x / SECTOR_SIZE;
-		objects[p_id].sector_y = objects[p_id].y / SECTOR_SIZE;
-		sectors[objects[p_id].sector_x][objects[p_id].sector_y].m_list_lock.lock();
-		sectors[objects[p_id].sector_x][objects[p_id].sector_y]
-			.m_object_list.insert(p_id);
-		sectors[objects[p_id].sector_x][objects[p_id].sector_y].m_list_lock.unlock();
+	int sx = objects[p_id].sector_x;
+	int sy = objects[p_id].sector_y;
+	if ((sx != (objects[p_id].x / SECTOR_SIZE))
+		|| (sy != (objects[p_id].y / SECTOR_SIZE))) {
+		sectors[sx][sy].m_list_lock.lock();
+		sectors[sx][sy].m_object_list.erase(p_id);
+		sectors[sx][sy].m_list_lock.unlock();
+		sx = objects[p_id].sector_x = objects[p_id].x / SECTOR_SIZE;
+		sy = objects[p_id].sector_y = objects[p_id].y / SECTOR_SIZE;
+		sectors[sx][sy].m_list_lock.lock();
+		sectors[sx][sy].m_object_list.insert(p_id);
+		sectors[sx][sy].m_list_lock.unlock();
 	}
 }
 
@@ -362,12 +369,11 @@ void respawn_AI(int id) {
 			break;
 	}
 
-	objects[id].sector_x = objects[id].x / SECTOR_SIZE;
-	objects[id].sector_y = objects[id].y / SECTOR_SIZE;
-	sectors[objects[id].sector_x][objects[id].sector_y].m_list_lock.lock();
-	sectors[objects[id].sector_x][objects[id].sector_y]
-		.m_object_list.insert(id);
-	sectors[objects[id].sector_x][objects[id].sector_y].m_list_lock.unlock();
+	int sx = objects[id].sector_x = objects[id].x / SECTOR_SIZE;
+	int sy = objects[id].sector_y = objects[id].y / SECTOR_SIZE;
+	sectors[sx][sy].m_list_lock.lock();
+	sectors[sx][sy].m_object_list.insert(id);
+	sectors[sx][sy].m_list_lock.unlock();
 
 	objects[id].LEVEL = 1 + (objects[id].sector_x / 2) + (objects[id].sector_y / 2);
 	objects[id].EXP = objects[id].LEVEL * objects[id].LEVEL * 2;
@@ -435,7 +441,7 @@ void process_packet(int p_id, unsigned char* p_buf)
 			break;
 		}
 
-		lock_guard <mutex> gl2{ objects[p_id].m_slock };
+		objects[p_id].m_info_lock.lock();
 		strcpy_s(objects[p_id].m_name, packet->player_id);
 
 		objects[p_id].x = 15;
@@ -452,29 +458,27 @@ void process_packet(int p_id, unsigned char* p_buf)
 
 		objects[p_id].m_state = PLST_INGAME;
 
-		objects[p_id].sector_x = objects[p_id].x / SECTOR_SIZE;
-		objects[p_id].sector_y = objects[p_id].y / SECTOR_SIZE;
+		int sx = objects[p_id].sector_x = objects[p_id].x / SECTOR_SIZE;
+		int sy = objects[p_id].sector_y = objects[p_id].y / SECTOR_SIZE;
+		objects[p_id].m_info_lock.unlock();
 
-		sectors[objects[p_id].sector_x][objects[p_id].sector_y]
-			.m_list_lock.lock();
-		sectors[objects[p_id].sector_x][objects[p_id].sector_y]
-			.m_object_list.insert(p_id);
-		sectors[objects[p_id].sector_x][objects[p_id].sector_y]
-			.m_list_lock.unlock();
+		sectors[sx][sy].m_list_lock.lock();
+		sectors[sx][sy].m_object_list.insert(p_id);
+		sectors[sx][sy].m_list_lock.unlock();
 
 		for (auto& pl : objects) {
 			if (p_id != pl.id) {
-				lock_guard <mutex> gl{ pl.m_slock };
+				pl.m_info_lock.lock();
 				if (PLST_INGAME == pl.m_state) {
 					if (can_see(p_id, pl.id)) {
-						objects[p_id].m_vl.lock();
+						objects[p_id].m_vlist_lock.lock();
 						objects[p_id].m_view_list.insert(pl.id);
-						objects[p_id].m_vl.unlock();
+						objects[p_id].m_vlist_lock.unlock();
 						send_add_object(p_id, pl.id);
 						if (false == is_npc(pl.id)) {
-							objects[pl.id].m_vl.lock();
+							objects[pl.id].m_vlist_lock.lock();
 							objects[pl.id].m_view_list.insert(p_id);
-							objects[pl.id].m_vl.unlock();
+							objects[pl.id].m_vlist_lock.unlock();
 							send_add_object(pl.id, p_id);
 						}
 						else {
@@ -482,6 +486,7 @@ void process_packet(int p_id, unsigned char* p_buf)
 						}
 					}
 				}
+				pl.m_info_lock.unlock();
 			}
 		}
 
@@ -497,7 +502,7 @@ void process_packet(int p_id, unsigned char* p_buf)
 		cs_packet_attack* packet = reinterpret_cast<cs_packet_attack*>(p_buf);
 		unordered_set<int> list;
 		int id = packet->id;
-		objects[id].m_vl.lock();
+		objects[id].m_vlist_lock.lock();
 		for (auto& i : objects[id].m_view_list) {
 			if (i <= 0) continue;
 			if (((objects[i].x == objects[id].x - 1) && (objects[i].y == objects[id].y))
@@ -545,7 +550,7 @@ void process_packet(int p_id, unsigned char* p_buf)
 		}
 
 
-		objects[id].m_vl.unlock();
+		objects[id].m_vlist_lock.unlock();
 		break;
 	}
 	default:
@@ -617,9 +622,9 @@ void do_npc_move(OBJECT& npc, MOVE_DIR dir)
 	for (auto pl : new_vl) {
 		if (0 == old_vl.count(pl)) {
 			// 플레이어의 시야에 등장
-			objects[pl].m_vl.lock();
+			objects[pl].m_vlist_lock.lock();
 			objects[pl].m_view_list.insert(npc.id);
-			objects[pl].m_vl.unlock();
+			objects[pl].m_vlist_lock.unlock();
 			if (pl < NPC_ID_START) {
 				send_add_object(pl, npc.id);
 			}
@@ -639,14 +644,14 @@ void do_npc_move(OBJECT& npc, MOVE_DIR dir)
 	for (auto pl : old_vl) {
 		if (0 == new_vl.count(pl)) {
 			// 플레이어의 시야에서 나감
-			objects[pl].m_vl.lock();
+			objects[pl].m_vlist_lock.lock();
 			if (0 != objects[pl].m_view_list.count(pl)) {
 				objects[pl].m_view_list.erase(npc.id);
-				objects[pl].m_vl.unlock();
+				objects[pl].m_vlist_lock.unlock();
 				send_remove_object(pl, npc.id);
 			}
 			else
-				objects[pl].m_vl.unlock();
+				objects[pl].m_vlist_lock.unlock();
 		}
 	}
 

@@ -53,9 +53,9 @@ bool DB::Connection_ODBC()
         return false;
     // Á¢¼Ó
     SQLSetConnectAttr(hDbc, SQL_LOGIN_TIMEOUT, (SQLPOINTER)5, 0);
-    if (SQLConnect(hDbc, (SQLWCHAR*)L"skyfall", SQL_NTS
+    if (SQLConnect(hDbc, (SQLWCHAR*)L"GS_termproject", SQL_NTS
         , (SQLWCHAR*)L"root", SQL_NTS
-        , (SQLWCHAR*)L"tjdwo@1034", SQL_NTS)
+        , (SQLWCHAR*)L"123456789", SQL_NTS)
         != SQL_SUCCESS) {
         std::cout << "DB error!\n";
         return false;

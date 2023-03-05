@@ -63,7 +63,6 @@ enum OBJECT_TYPE {
 
 struct OBJECT
 {
-	mutex  m_slock;
 	atomic<PL_STATE> m_state;
 	SOCKET m_socket;
 	int		id;
@@ -71,6 +70,7 @@ struct OBJECT
 	EX_OVER m_recv_over;
 	int m_prev_size;
 
+	mutex  m_info_lock;
 	atomic<bool> is_active;
 
 	char m_name[200];
@@ -85,9 +85,9 @@ struct OBJECT
 	short type;
 
 	int move_time;
-	unordered_set <int> m_view_list;
-	mutex m_vl;
 
+	unordered_set <int> m_view_list;
+	mutex m_vlist_lock;
 	int sector_x;
 	int sector_y;
 

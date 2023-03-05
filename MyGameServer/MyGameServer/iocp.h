@@ -27,6 +27,11 @@ void worker(HANDLE h_iocp, SOCKET l_socket);
 
 int AI_get_x(lua_State* L);
 int AI_get_y(lua_State* L);
+int AI_get_HP(lua_State* L);
+int AI_get_type(lua_State* L);
+int AI_get_LEVEL(lua_State* L);
 int AI_send_mess(lua_State* L);
+int AI_damage_to_player(lua_State* L);
+int AI_move(lua_State* L);
 
 int main();
