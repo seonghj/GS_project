@@ -275,7 +275,6 @@ void do_move(int p_id, MOVE_DIR dir)
 
 	for (auto pl : new_vl) {
 		if (0 == old_vl.count(pl)) {		
-			// 1. 새로 시야에 들어오는 경우
 			objects[p_id].m_vlist_lock.lock();
 			objects[p_id].m_view_list.insert(pl);
 			objects[p_id].m_vlist_lock.unlock();
@@ -302,7 +301,6 @@ void do_move(int p_id, MOVE_DIR dir)
 			}
 		}
 		else {								
-			// 2. 기존 시야에도 있고 새 시야에도 있는 경우
 			if (false == is_npc(pl)) {
 				objects[pl].m_vlist_lock.lock();
 				if (0 == objects[pl].m_view_list.count(p_id)) {
@@ -327,7 +325,6 @@ void do_move(int p_id, MOVE_DIR dir)
 
 	for (auto pl : old_vl) {
 		if (0 == new_vl.count(pl)) {
-			// 3. 시야에서 사라진 경우
 			objects[p_id].m_vlist_lock.lock();
 			objects[p_id].m_view_list.erase(pl);
 			objects[p_id].m_vlist_lock.unlock();
