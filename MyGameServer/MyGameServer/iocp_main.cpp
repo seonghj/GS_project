@@ -918,9 +918,9 @@ void init_objects()
 			pl.is_move = true;
 
 			lua_State* L = pl.L = luaL_newstate();
-			luaL_openlibs(L);               // 기본 라이브러리 로드
-			luaL_loadfile(L, "npc.lua");      // 가상머신, 프로그램 코드, 프로그램 코드 길이, 실행방식(줄단위)
-			int res = lua_pcall(L, 0, 0, 0);            // 실행
+			luaL_openlibs(L);								// 기본 라이브러리 로드
+			luaL_loadfile(L, "npc.lua");					// 가상머신, 프로그램 코드, 프로그램 코드 길이, 실행방식(줄단위)
+			int res = lua_pcall(L, 0, 0, 0);				 // 실행
 
 			lua_getglobal(L, "set_id");
 			lua_pushnumber(L, pl.id);
